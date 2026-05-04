@@ -3,3 +3,5 @@ chromadb
 sentence-transformers
 streamlit
 pymupdf
+pdf2image
+pillow
