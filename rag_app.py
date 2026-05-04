@@ -1,4 +1,5 @@
 import os
+import uuid
 import streamlit as st
 import chromadb
 import anthropic
@@ -31,7 +32,6 @@ def smart_chunk_text(text, chunk_size=400, overlap=50):
     return chunks
 
 def build_collection(chunks):
-    import uuid
     db = chromadb.Client()
     collection_name = f"doc_{uuid.uuid4().hex[:8]}"
     collection = db.create_collection(collection_name)
@@ -64,33 +64,32 @@ uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
 
 if uploaded_file is not None:
     if "current_file" not in st.session_state or st.session_state.current_file != uploaded_file.name:
-with st.spinner("Reading and indexing your document..."):
-    text = extract_text_from_pdf(uploaded_file)
-    st.write(f"Extracted text length: {len(text)} characters")
-    st.write(f"First 200 chars: {text[:200]}")
-    chunks = smart_chunk_text(text)
-            st.session_state.collection = build_collection(chunks)
-            st.session_state.current_file = uploaded_file.name
-            st.session_state.messages = []
-            st.session_state.chunk_count = len(chunks)
-        st.success(f"Document indexed! Created {st.session_state.chunk_count} chunks. Ready for questions.")
+        with st.spinner("Reading and indexing your document..."):
+            text = extract_text_from_pdf(uploaded_file)
+            st.info(f"Extracted {len(text)} characters from PDF")
+            if len(text) < 100:
+                st.error("This appears to be a scanned PDF. Very little text was extracted. Try a text-based PDF.")
+            else:
+                chunks = smart_chunk_text(text)
+                st.session_state.collection = build_collection(chunks)
+                st.session_state.current_file = uploaded_file.name
+                st.session_state.messages = []
+                st.session_state.chunk_count = len(chunks)
+                st.success(f"Indexed {st.session_state.chunk_count} chunks. Ready for questions!")
 
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+    if "messages" in st.session_state and "collection" in st.session_state:
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    if prompt := st.chat_input("Ask a question about your document..."):
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("assistant"):
-            with st.spinner("Searching document..."):
-                answer = ask_rag(prompt, st.session_state.collection)
-            st.markdown(answer)
-        st.session_state.messages.append({"role": "assistant", "content": answer})
-
+        if prompt := st.chat_input("Ask a question about your document..."):
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("assistant"):
+                with st.spinner("Searching document..."):
+                    answer = ask_rag(prompt, st.session_state.collection)
+                st.markdown(answer)
+            st.session_state.messages.append({"role": "assistant", "content": answer})
 else:
     st.info("Please upload a PDF to get started")
