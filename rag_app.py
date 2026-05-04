@@ -64,9 +64,11 @@ uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
 
 if uploaded_file is not None:
     if "current_file" not in st.session_state or st.session_state.current_file != uploaded_file.name:
-        with st.spinner("Reading and indexing your document..."):
-            text = extract_text_from_pdf(uploaded_file)
-            chunks = smart_chunk_text(text)
+with st.spinner("Reading and indexing your document..."):
+    text = extract_text_from_pdf(uploaded_file)
+    st.write(f"Extracted text length: {len(text)} characters")
+    st.write(f"First 200 chars: {text[:200]}")
+    chunks = smart_chunk_text(text)
             st.session_state.collection = build_collection(chunks)
             st.session_state.current_file = uploaded_file.name
             st.session_state.messages = []
