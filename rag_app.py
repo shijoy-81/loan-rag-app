@@ -1,19 +1,56 @@
 import os
 import uuid
+import base64
 import streamlit as st
 import chromadb
 import anthropic
-import fitz
+from pdf2image import convert_from_bytes
 
 ANTHROPIC_API_KEY = st.secrets["ANTHROPIC_API_KEY"]
 os.environ["ANTHROPIC_API_KEY"] = ANTHROPIC_API_KEY
 
-def extract_text_from_pdf(pdf_file):
-    doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
-    text = ""
-    for page in doc:
-        text += page.get_text()
-    return text
+def extract_text_with_claude_vision(pdf_file):
+    client = anthropic.Anthropic()
+    pdf_bytes = pdf_file.read()
+    pages = convert_from_bytes(pdf_bytes, dpi=150)
+    
+    all_text = ""
+    for i, page in enumerate(pages):
+        # Convert page image to base64
+        import io
+        buffer = io.BytesIO()
+        page.save(buffer, format="PNG")
+        img_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        
+        # Send to Claude Vision
+        message = client.messages.create(
+            model="claude-opus-4-5",
+            max_tokens=2000,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": img_base64
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": "Extract ALL text from this page exactly as it appears. Include text from cards, tables, columns, diagrams and any visual elements. Output only the extracted text, nothing else."
+                        }
+                    ]
+                }
+            ]
+        )
+        
+        page_text = message.content[0].text
+        all_text += f"\n\n--- Page {i+1} ---\n\n{page_text}"
+    
+    return all_text
 
 def smart_chunk_text(text, chunk_size=800, overlap=100):
     sections = text.split('\n\n')
@@ -64,18 +101,14 @@ uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
 
 if uploaded_file is not None:
     if "current_file" not in st.session_state or st.session_state.current_file != uploaded_file.name:
-        with st.spinner("Reading and indexing your document..."):
-            text = extract_text_from_pdf(uploaded_file)
-            st.info(f"Extracted {len(text)} characters from PDF")
-            if len(text) < 100:
-                st.error("This appears to be a scanned PDF. Very little text was extracted. Try a text-based PDF.")
-            else:
-                chunks = smart_chunk_text(text, chunk_size=800, overlap=100)
-                st.session_state.collection = build_collection(chunks)
-                st.session_state.current_file = uploaded_file.name
-                st.session_state.messages = []
-                st.session_state.chunk_count = len(chunks)
-                st.success(f"Indexed {st.session_state.chunk_count} chunks. Ready for questions!")
+        with st.spinner("Reading PDF with Claude Vision... this may take a minute for large documents"):
+            text = extract_text_with_claude_vision(uploaded_file)
+            chunks = smart_chunk_text(text)
+            st.session_state.collection = build_collection(chunks)
+            st.session_state.current_file = uploaded_file.name
+            st.session_state.messages = []
+            st.session_state.chunk_count = len(chunks)
+        st.success(f"Indexed {st.session_state.chunk_count} chunks. Ready for questions!")
 
     if "messages" in st.session_state and "collection" in st.session_state:
         for message in st.session_state.messages:
