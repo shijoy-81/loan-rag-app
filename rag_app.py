@@ -15,7 +15,7 @@ def extract_text_from_pdf(pdf_file):
         text += page.get_text()
     return text
 
-def smart_chunk_text(text, chunk_size=400, overlap=50):
+def smart_chunk_text(text, chunk_size=800, overlap=100):
     sections = text.split('\n\n')
     chunks = []
     current_chunk = ""
@@ -42,7 +42,7 @@ def build_collection(chunks):
     return collection
 
 def ask_rag(question, collection):
-    results = collection.query(query_texts=[question], n_results=2)
+    results = collection.query(query_texts=[question], n_results=4)
     context = "\n\n".join(results['documents'][0])
     prompt = (
         f"Answer the question using ONLY the context below.\n"
@@ -70,7 +70,7 @@ if uploaded_file is not None:
             if len(text) < 100:
                 st.error("This appears to be a scanned PDF. Very little text was extracted. Try a text-based PDF.")
             else:
-                chunks = smart_chunk_text(text)
+                chunks = smart_chunk_text(text, chunk_size=800, overlap=100)
                 st.session_state.collection = build_collection(chunks)
                 st.session_state.current_file = uploaded_file.name
                 st.session_state.messages = []
