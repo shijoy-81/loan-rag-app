@@ -80,7 +80,8 @@ def build_collection(chunks):
 
 def ask_rag(question, collection):
     results = collection.query(query_texts=[question], n_results=4)
-    context = "\n\n".join(results['documents'][0])
+    retrieved_chunks = results['documents'][0]
+    context = "\n\n".join(retrieved_chunks)
     prompt = (
         f"Answer the question using ONLY the context below.\n"
         f"If the answer is not in the context, say I don't have that information.\n\n"
@@ -92,7 +93,7 @@ def ask_rag(question, collection):
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}]
     )
-    return message.content[0].text
+    return message.content[0].text, retrieved_chunks
 
 st.title("Document Assistant")
 st.caption("Upload any PDF and ask questions about it")
@@ -115,14 +116,24 @@ if uploaded_file is not None:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        if prompt := st.chat_input("Ask a question about your document..."):
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("assistant"):
-                with st.spinner("Searching document..."):
-                    answer = ask_rag(prompt, st.session_state.collection)
-                st.markdown(answer)
-            st.session_state.messages.append({"role": "assistant", "content": answer})
-else:
-    st.info("Please upload a PDF to get started")
+if prompt := st.chat_input("Ask a question about your document..."):
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    with st.chat_message("assistant"):
+        with st.spinner("Searching document..."):
+            answer, chunks = ask_rag(prompt, st.session_state.collection)
+        st.markdown(answer)
+        
+        # Show retrieved chunks in expander
+        with st.expander("📄 View retrieved chunks"):
+            for i, chunk in enumerate(chunks):
+                st.markdown(f"**Chunk {i+1}:**")
+                st.markdown(f"> {chunk}")
+                st.divider()
+    
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": answer
+    })
