@@ -30,8 +30,10 @@ def smart_chunk_text(text, chunk_size=400, overlap=50):
         chunks.append(current_chunk.strip())
     return chunks
 
-def build_collection(chunks, collection_name="uploaded_doc"):
+def build_collection(chunks):
+    import uuid
     db = chromadb.Client()
+    collection_name = f"doc_{uuid.uuid4().hex[:8]}"
     collection = db.create_collection(collection_name)
     collection.add(
         documents=chunks,
